@@ -19,6 +19,8 @@
             box-sizing: border-box;
             font-family: "Microsoft JhengHei", "Heiti TC", sans-serif;
             -webkit-tap-highlight-color: transparent;
+            /* 禁止選取文字，增加一點保護感 */
+            user-select: none; 
         }
 
         body {
@@ -102,6 +104,7 @@
             color: var(--text);
         }
 
+        /* 允許輸入框選取文字，不然會很難用 */
         select, input, textarea {
             width: 100%;
             padding: 12px;
@@ -110,6 +113,7 @@
             font-size: 1rem;
             transition: border 0.3s;
             background: #fafafa;
+            user-select: text; 
         }
 
         select:focus, input:focus, textarea:focus {
@@ -340,7 +344,8 @@
 
     </style>
 </head>
-<body>
+<body oncontextmenu="return false;"> 
+<!-- ☝️ 加入 oncontextmenu="return false;" 禁止右鍵 -->
 
 <!-- 背景音樂 -->
 <audio id="bgm" loop>
@@ -487,6 +492,21 @@
         timestamp: ""
     };
     
+    // --- 密碼保護功能 ---
+    // 這是一個簡單的雜湊函數，把字串轉換成數字
+    function simpleHash(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32bit integer
+        }
+        return hash;
+    }
+
+    //  的 Hash 值預先計算結果是 1481544
+    const TEACHER_PWD_HASH = 1481544;
+
     // --- 初始化 ---
     window.onload = function() {
         const seatSelect = document.getElementById('input-seat');
@@ -510,6 +530,13 @@
             }
         });
 
+        // 禁止 F12 鍵 (簡單防護)
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'F12' || (event.ctrlKey && event.shiftKey && event.key === 'I')) {
+                event.preventDefault();
+            }
+        });
+
         document.getElementById('input-target').addEventListener('input', function(e){
             const hint = document.getElementById('space-instruction');
             if(e.target.value.trim() !== "") {
@@ -530,20 +557,17 @@
         const bgm = document.getElementById('bgm');
         bgm.volume = 0.5;
 
-        // 嘗試自動播放 (在使用者第一次點擊網頁任何地方時觸發)
-        // 使用 once: true 確保只嘗試一次
+        // 嘗試自動播放
         document.body.addEventListener('click', startMusicOnce, { once: true });
     };
 
     // --- 音樂控制 (修正版) ---
     function startMusicOnce(e) {
-        // 如果使用者是點擊「音樂按鈕」觸發的，這裡就不要處理，交給 toggleMusic 處理
         if (e.target.id === 'music-btn') return;
 
         const bgm = document.getElementById('bgm');
         const btn = document.getElementById('music-btn');
         
-        // 只有在還沒播放時才嘗試播放
         if (bgm.paused) {
             const playPromise = bgm.play();
             if (playPromise !== undefined) {
@@ -551,9 +575,7 @@
                     isMusicPlaying = true;
                     btn.innerText = "🎵";
                 }).catch(error => {
-                    // 自動播放被阻擋是常見現象，不需要報錯
                     console.log("等待使用者互動才能播放音樂");
-                    // 如果失敗，把監聽器加回去，等待下一次點擊
                     document.body.addEventListener('click', startMusicOnce, { once: true });
                 });
             }
@@ -561,7 +583,6 @@
     }
 
     function toggleMusic(e) {
-        // 重要：阻止事件冒泡，不要讓 click 事件傳到 body 觸發 startMusicOnce
         if (e) {
             e.stopPropagation();
         }
@@ -576,7 +597,6 @@
                     isMusicPlaying = true;
                     btn.innerText = "🎵";
                 }).catch(error => {
-                    // 如果是因為快速切換導致的 "interrupted by pause" 錯誤，忽略它 (這在 AbortError 中是正常的)
                     if (error.name === 'AbortError') {
                         console.log("播放切換動作被中斷 (正常)");
                     } else {
@@ -661,7 +681,10 @@
 
     function checkPassword() {
         const pwd = document.getElementById('teacher-pwd-input').value;
-        if (pwd === "0426") {
+        
+        // 🛡️ 安全性更新：比對 Hash 值而不是密碼明文
+        // 0426 的 simpleHash 結果是 1481544
+        if (simpleHash(pwd) === TEACHER_PWD_HASH) {
             closeTeacherModal();
             if (SHEET_URL && SHEET_URL.startsWith("http")) {
                 window.open(SHEET_URL, '_blank');
