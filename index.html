@@ -286,19 +286,19 @@
             color: #555;
         }
 
-        /* 音樂開關按鈕 (新增) */
+        /* 音樂開關按鈕 (修正版) */
         #music-btn {
             position: absolute;
             top: 15px;
             right: 15px;
-            background: rgba(255, 255, 255, 0.8);
+            background: rgba(255, 255, 255, 0.9);
             border: 2px solid var(--primary);
             border-radius: 50%;
             width: 40px;
             height: 40px;
             font-size: 20px;
             cursor: pointer;
-            z-index: 10;
+            z-index: 100; /* 提高層級，確保可點擊 */
             display: flex;
             align-items: center;
             justify-content: center;
@@ -350,8 +350,8 @@
 </audio>
 
 <div class="machine-container">
-    <!-- 音樂控制按鈕 -->
-    <button id="music-btn" onclick="toggleMusic()">🔇</button>
+    <!-- 音樂控制按鈕：加入 event 參數傳遞 -->
+    <button id="music-btn" onclick="toggleMusic(event)">🔇</button>
 
     <h1>🎄 聖誕祝福自動販賣機</h1>
     <div class="subtitle">Christmas Blessing Machine</div>
@@ -472,7 +472,7 @@
 <!-- 腳本邏輯 -->
 <script>
     // --- 教師設定區 ---
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby_Lqb-aM2VvVsx6Xt0asz-LbzrD_whGchUVJc7YI__n_9iNCCIkmd2Z7M7y7XrOmXq/exec"; 
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzCqEu_TmZLYtq4Oc8D4p7ZjfD-CciQmKH_uJtZWiSok0byww1c9J3fTyRwpPhnmyeJ/exec"; 
     const SHEET_URL = "https://docs.google.com/spreadsheets/d/186d1vh4WD14fjM17nkvxhMUkzMzkqSmrJAgesEvzNlg/edit?usp=sharing";
 
     // --- 全域變數 ---
@@ -530,32 +530,64 @@
         const bgm = document.getElementById('bgm');
         bgm.volume = 0.5;
 
-        // 嘗試自動播放 (在使用者第一次互動時觸發)
+        // 嘗試自動播放 (在使用者第一次點擊網頁任何地方時觸發)
+        // 使用 once: true 確保只嘗試一次
         document.body.addEventListener('click', startMusicOnce, { once: true });
     };
 
-    // --- 音樂控制 ---
-    function startMusicOnce() {
+    // --- 音樂控制 (修正版) ---
+    function startMusicOnce(e) {
+        // 如果使用者是點擊「音樂按鈕」觸發的，這裡就不要處理，交給 toggleMusic 處理
+        if (e.target.id === 'music-btn') return;
+
         const bgm = document.getElementById('bgm');
-        // 如果還沒開始播放，就嘗試播放
-        if (bgm.paused && !isMusicPlaying) {
-            toggleMusic();
+        const btn = document.getElementById('music-btn');
+        
+        // 只有在還沒播放時才嘗試播放
+        if (bgm.paused) {
+            const playPromise = bgm.play();
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    isMusicPlaying = true;
+                    btn.innerText = "🎵";
+                }).catch(error => {
+                    // 自動播放被阻擋是常見現象，不需要報錯
+                    console.log("等待使用者互動才能播放音樂");
+                    // 如果失敗，把監聽器加回去，等待下一次點擊
+                    document.body.addEventListener('click', startMusicOnce, { once: true });
+                });
+            }
         }
     }
 
-    function toggleMusic() {
+    function toggleMusic(e) {
+        // 重要：阻止事件冒泡，不要讓 click 事件傳到 body 觸發 startMusicOnce
+        if (e) {
+            e.stopPropagation();
+        }
+
         const bgm = document.getElementById('bgm');
         const btn = document.getElementById('music-btn');
         
         if (bgm.paused) {
-            bgm.play().then(() => {
-                isMusicPlaying = true;
-                btn.innerText = "🎵"; // 播放中圖示
-            }).catch(e => console.log("等待使用者互動才能播放音樂"));
+            const playPromise = bgm.play();
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    isMusicPlaying = true;
+                    btn.innerText = "🎵";
+                }).catch(error => {
+                    // 如果是因為快速切換導致的 "interrupted by pause" 錯誤，忽略它 (這在 AbortError 中是正常的)
+                    if (error.name === 'AbortError') {
+                        console.log("播放切換動作被中斷 (正常)");
+                    } else {
+                        console.error("播放失敗:", error);
+                    }
+                });
+            }
         } else {
             bgm.pause();
             isMusicPlaying = false;
-            btn.innerText = "🔇"; // 靜音圖示
+            btn.innerText = "🔇";
         }
     }
 
